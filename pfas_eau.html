@@ -30,16 +30,16 @@
   });
 
   map.on('load', function() {
-    map.addSource('pfas', {
+    map.addSource('UDI_pfas_j', {
       type: 'vector',
-      url: 'pmtiles://https://ton-pseudo.github.io/pfas-carte/pfas.pmtiles'
+      url: 'pmtiles://https:///Users/lisaboudoussier/Documents/Enquête PFAS - Vert/pfas.pmtiles'
     });
 
     map.addLayer({
       id: 'pfas-fill',
       type: 'fill',
-      source: 'pfas',
-      'source-layer': 'pfas', // nom de la couche dans le PMTiles
+      source: 'UDI_pfas_j',
+      'source-layer': 'UDI_pfas_j', // nom de la couche dans le PMTiles
       minzoom: 4,
       paint: {
         'fill-color': ['get', 'couleur'],
