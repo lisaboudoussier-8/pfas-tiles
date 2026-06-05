@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>PFAS - Qualité de l'eau</title>
+  <script src="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.js"></script>
+  <link href="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.css" rel="stylesheet">
+
+  <!-- Plugin de géocodage -->
+  <script src="https://unpkg.com/@maplibre/maplibre-gl-geocoder@1.5.0/dist/maplibre-gl-geocoder.min.js"></script>
+  <link href="https://unpkg.com/@maplibre/maplibre-gl-geocoder@1.5.0/dist/maplibre-gl-geocoder.css" rel="stylesheet">
+
+  <style>
+    body { margin: 0; }
+    #map { width: 100vw; height: 100vh; }
+
+    #legend {
+      position: absolute;
+      bottom: 30px;
+      left: 10px;
+      background: white;
+      padding: 10px 14px;
+      border-radius: 6px;
+      font-family: sans-serif;
+      font-size: 13px;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.2);
+    }
+    .legend-item { display: flex; align-items: center; gap: 8px; margin: 4px 0; }
+    .legend-box { width: 16px; height: 16px; border: 1px solid #ccc; flex-shrink: 0; }
+
+    #buttons {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    #buttons button {
+      background: white;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+      padding: 6px 10px;
+      font-size: 12px;
+      cursor: pointer;
+    }
+    #buttons button:hover { background: #f0f0f0; }
+  </style>
+</head>
+<body>
+
+<div id="map"></div>
+
+<div id="legend">
+  <b>Concentration en PFAS (seuil 0,1 µg/L)</b>
+  <div class="legend-item"><div class="legend-box" style="background:#000"></div> Pas de données</div>
+  <div class="legend-item"><div class="legend-box" style="background:#81C98A"></div> Conforme (&lt; 0,1 µg/L)</div>
+  <div class="legend-item"><div class="legend-box" style="background:#E24B4A"></div> Non conforme (≥ 0,1 µg/L)</div>
+</div>
+
+<div id="buttons">
+  <button onclick="flyTo([2.5, 46.5], 5)">France métropolitaine</button>
+  <button onclick="flyTo([-61.5, 16.2], 9)">Guadeloupe</button>
+  <button onclick="flyTo([-61.0, 14.6], 9)">Martinique</button>
+  <button onclick="flyTo([-53.0, 4.0], 6)">Guyane</button>
+  <button onclick="flyTo([55.5, -21.1], 9)">La Réunion</button>
+  <button onclick="flyTo([45.2, -12.8], 10)">Mayotte</button>
+</div>
+
+<script>
+  const map = new maplibregl.Map({
+    container: 'map',
+    style: 'https://api.maptiler.com/maps/dataviz/style.json?key=93VLEQWRu6foI9TAdB92',
+    center: [2.5, 46.5],
+    zoom: 5
+  });
+
+  // ── BARRE DE RECHERCHE ──────────────────────────────────────────
+  const geocoder = new MaplibreGeocoder(
+    {
+      // API de géocodage : Nominatim (OpenStreetMap, gratuit)
+      forwardGeocode: async (config) => {
+        const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(config.query)}&format=geojson&countrycodes=fr&limit=5`;
+        const res = await fetch(url, {
+          headers: { 'Accept-Language': 'fr' }
+        });
+        const data = await res.json();
+        return {
+          features: data.features.map(f => ({
+            type: 'Feature',
+            geometry: f.geometry,
+            place_name: f.properties.display_name,
+            center: f.geometry.coordinates,
+            properties: f.properties
+          }))
+        };
+      }
+    },
+    {
+      maplibregl,
+      placeholder: 'Rechercher une commune...',
+      collapsed: false,   // true = icône loupe repliée par défaut
+      flyTo: { zoom: 11 } // zoom appliqué après sélection
+    }
+  );
+
+  // Position en haut à gauche (sous les contrôles de zoom si tu en as)
+  map.addControl(geocoder, 'top-left');
+  // ────────────────────────────────────────────────────────────────
+
+  map.on('load', function() {
+    map.addSource('udi_pfas', {
+      type: 'vector',
+      tiles: ['https://api.maptiler.com/tiles/019e4419-1044-75bf-b61e-297381b41992/{z}/{x}/{y}.pbf?key=93VLEQWRu6foI9TAdB92'],
+      minzoom: 4,
+      maxzoom: 12
+    });
+
+    map.addLayer({
+      id: 'pfas-fill',
+      type: 'fill',
+      source: 'udi_pfas',
+      'source-layer': 'udi_pfas_simple',
+      minzoom: 4,
+      paint: {
+        'fill-color': ['get', 'couleur'],
+        'fill-opacity': 0.7
+      }
+    });
+
+    map.on('click', 'pfas-fill', function(e) {
+      const props = e.features[0].properties;
+      new maplibregl.Popup()
+        .setLngLat(e.lngLat)
+        .setHTML(props.popup)
+        .addTo(map);
+    });
+
+    map.on('mouseenter', 'pfas-fill', () => map.getCanvas().style.cursor = 'pointer');
+    map.on('mouseleave', 'pfas-fill', () => map.getCanvas().style.cursor = '');
+  });
+
+  function flyTo(center, zoom) {
+    map.flyTo({ center, zoom });
+  }
+</script>
+
+</body>
+</html>
