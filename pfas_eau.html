@@ -5,28 +5,184 @@
   <title>PFAS - Qualité de l'eau</title>
   <script src="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.js"></script>
   <link href="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.css" rel="stylesheet">
-  <!-- PMTiles -->
   <script src="https://unpkg.com/pmtiles@3.0.6/dist/pmtiles.js"></script>
+  <script src="https://unpkg.com/@maplibre/maplibre-gl-geocoder@1.5.0/dist/maplibre-gl-geocoder.min.js"></script>
+  <link href="https://unpkg.com/@maplibre/maplibre-gl-geocoder@1.5.0/dist/maplibre-gl-geocoder.css" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Merriweather:wght@400;600&display=swap" rel="stylesheet">
 
   <style>
-    body { margin: 0; }
-    #map { width: 100vw; height: 100vh; }
-    /* ... ton CSS existant ... */
+    /* Police globale */
+    * {
+      font-family: 'Merriweather', serif;
+    }
+
+    body {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+}
+
+    #map {
+  width: 100%;
+  flex: 1;
+  min-height: 0;
+}
+
+    #legend {
+      position: absolute;
+      bottom: 30px;
+      left: 10px;
+      background: white;
+      padding: 10px 14px;
+      border-radius: 6px;
+      font-size: 13px;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.2);
+    }
+    .legend-item { display: flex; align-items: center; gap: 8px; margin: 4px 0; }
+    .legend-box { width: 16px; height: 16px; border: 1px solid #ccc; flex-shrink: 0; }
+
+    #buttons {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    #buttons button {
+      background: white;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+      padding: 6px 10px;
+      font-size: 12px;
+      cursor: pointer;
+    }
+    #buttons button:hover { background: #f0f0f0; }
+
+    #sources {
+      position: absolute;
+      bottom: 20px;
+      right: 10px;
+      background: white;
+      padding: 6px 10px;
+      border-radius: 6px;
+      font-size: 11px;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 8px;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.2);
+    }
+
+    .maplibregl-ctrl-geocoder {
+      width: 300px;
+      max-width: 300px;
+    }
+    .maplibregl-ctrl-geocoder--icon-search {
+      display: none;
+    }
+    .maplibregl-marker {
+      display: none !important;
+    }
+    .maplibregl-ctrl-geocoder input,
+    .maplibregl-ctrl-geocoder .suggestions,
+    .maplibregl-ctrl-geocoder .suggestions li {
+  font-family: 'Merriweather', serif !important;
+}
   </style>
 </head>
 <body>
+
 <div id="map"></div>
 
+<div id="legend">
+  <b>Concentration en PFAS (seuil 0,1 µg/L)</b>
+  <div class="legend-item"><div class="legend-box" style="background:#000"></div> Pas de données</div>
+  <div class="legend-item"><div class="legend-box" style="background:#40c58d"></div> Conforme (&lt; 0,1 µg/L)</div>
+  <div class="legend-item"><div class="legend-box" style="background:#F5BA47"></div> Non conforme (≥ 0,02 µg/L)</div>
+  <div class="legend-item"><div class="legend-box" style="background:#E7292D"></div> Non conforme (≥ 0,1 µg/L)</div>
+
+ <hr style="border: none; border-top: 1px solid #eee; margin: 10px 0;">
+
+<div style="font-size: 11px;">
+  <div>Source : Ministère des Solidarités et de la Santé</div>
+  <div>© Lisa Boudoussier</div>
+</div>
+<div style="display: flex; justify-content: flex-end; margin-top: 2px;">
+  <img src="https://lisaboudoussier-8.github.io/pfas-tiles/LOGOS_VERT-04.png" alt="Vert" height="26">
+</div>
+</div>
+
+<div id="buttons">
+  <button onclick="flyTo([2.5, 46.5], 5)">France métropolitaine</button>
+  <button onclick="flyTo([-61.5, 16.2], 9)">Guadeloupe</button>
+  <button onclick="flyTo([-61.0, 14.6], 9)">Martinique</button>
+  <button onclick="flyTo([-53.0, 4.0], 6)">Guyane</button>
+  <button onclick="flyTo([55.5, -21.1], 9)">La Réunion</button>
+  <button onclick="flyTo([45.2, -12.8], 10)">Mayotte</button>
+</div>
+
 <script>
-  // Active le protocol PMTiles
   const protocol = new pmtiles.Protocol();
   maplibregl.addProtocol("pmtiles", protocol.tile);
 
   const map = new maplibregl.Map({
     container: 'map',
-    style: 'https://basemaps.cartocdn.com/gl/positron-gl-style/style.json', // fond de carte gratuit
+    style: 'https://api.maptiler.com/maps/dataviz/style.json?key=93VLEQWRu6foI9TAdB92',
     center: [2.5, 46.5],
     zoom: 5
+  });
+
+  const geocoder = new MaplibreGeocoder(
+    {
+      forwardGeocode: async (config) => {
+        try {
+          const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(config.query)}&format=geojson&countrycodes=fr&limit=5`;
+          const res = await fetch(url, { headers: { 'Accept-Language': 'fr' } });
+          const data = await res.json();
+          return {
+            features: data.features.map(f => ({
+              type: 'Feature',
+              geometry: f.geometry,
+              place_name: f.properties.display_name,
+              center: f.geometry.type === 'Point'
+                ? f.geometry.coordinates
+                : [f.bbox[0] + (f.bbox[2] - f.bbox[0]) / 2, f.bbox[1] + (f.bbox[3] - f.bbox[1]) / 2],
+              properties: f.properties
+            }))
+          };
+        } catch(e) {
+          return { features: [] };
+        }
+      }
+    },
+    {
+      maplibregl,
+      placeholder: '🔍   Rechercher une commune',
+      collapsed: false,
+      flyTo: false
+    }
+  );
+
+  map.addControl(geocoder, 'top-left');
+
+  geocoder.on('result', function(e) {
+    const center = e.result.center;
+    map.flyTo({ center, zoom: 11 });
+    map.once('moveend', function() {
+      setTimeout(() => {
+        const point = map.project(center);
+        const features = map.queryRenderedFeatures(point, { layers: ['pfas-fill'] });
+        if (features.length > 0) {
+          const props = features[0].properties;
+          new maplibregl.Popup()
+            .setLngLat(center)
+            .setHTML(props.popup)
+            .addTo(map);
+        }
+      }, 500);
+    });
   });
 
   map.on('load', function() {
@@ -39,7 +195,7 @@
       id: 'pfas-fill',
       type: 'fill',
       source: 'UDI_pfas_j',
-      'source-layer': 'UDI_pfas_j', // nom de la couche dans le PMTiles
+      'source-layer': 'UDI_pfas_j',
       minzoom: 4,
       paint: {
         'fill-color': ['get', 'couleur'],
