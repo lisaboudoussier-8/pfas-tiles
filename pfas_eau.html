@@ -2,6 +2,7 @@
 <html>
 <head>
   <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>PFAS - Qualité de l'eau</title>
   <script src="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.js"></script>
   <link href="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.css" rel="stylesheet">
@@ -22,6 +23,7 @@
 
     #map { width: 100%; height: 100%; }
 
+    /* ── LÉGENDE ── */
     #legend {
       position: absolute;
       bottom: 20px;
@@ -37,6 +39,7 @@
     .legend-item { display: flex; align-items: center; gap: 6px; margin: 3px 0; }
     .legend-box { width: 12px; height: 12px; border: 1px solid #ccc; flex-shrink: 0; }
 
+    /* ── BOUTONS DOM ── */
     #buttons {
       position: absolute;
       top: 10px;
@@ -55,6 +58,7 @@
     }
     #buttons button:hover { background: #f0f0f0; }
 
+    /* ── BOUTON PLEIN ÉCRAN ── */
     #fullscreen-btn {
       position: absolute;
       bottom: 20px;
@@ -69,6 +73,17 @@
     }
     #fullscreen-btn:hover { background: #f0f0f0; }
 
+    /* ── FAUX PLEIN ÉCRAN iOS ── */
+    .fake-fullscreen {
+      position: fixed !important;
+      top: 0 !important;
+      left: 0 !important;
+      width: 100vw !important;
+      height: 100vh !important;
+      z-index: 9999 !important;
+    }
+
+    /* ── BARRE DE RECHERCHE ── */
     .maplibregl-ctrl-geocoder { width: 260px; max-width: 260px; }
     .maplibregl-ctrl-geocoder--icon-search { display: none; }
     .maplibregl-marker { display: none !important; }
@@ -77,6 +92,33 @@
     .maplibregl-ctrl-geocoder .suggestions li {
       font-family: 'Vend Sans', sans-serif !important;
       font-size: 12px;
+    }
+
+    /* ── RESPONSIVE MOBILE ── */
+    @media (max-width: 600px) {
+      #legend {
+        font-size: 10px;
+        padding: 6px 8px;
+        max-width: 200px;
+        bottom: 50px;
+      }
+      #legend b { font-size: 10px; }
+      .legend-box { width: 10px; height: 10px; }
+
+      #buttons button {
+        font-size: 10px;
+        padding: 4px 8px;
+      }
+
+      .maplibregl-ctrl-geocoder {
+        width: calc(100vw - 130px);
+        max-width: calc(100vw - 130px);
+      }
+
+      #fullscreen-btn {
+        font-size: 11px;
+        padding: 5px 8px;
+      }
     }
   </style>
 </head>
@@ -89,9 +131,9 @@
   <div id="legend">
     <b>Concentration en PFAS (seuil 0,1 µg/L)</b>
     <div class="legend-item"><div class="legend-box" style="background:grey"></div> Pas de données</div>
-    <div class="legend-item"><div class="legend-box" style="background:#40c58d"></div> Conforme à la limite de qualité (&lt; 0,1 µg/l)*</div>
-    <div class="legend-item"><div class="legend-box" style="background:#F5BA47"></div> Dépasse la limite du HCSP (> 0,02 µg/l)**</div>
-    <div class="legend-item"><div class="legend-box" style="background:#E7292D"></div> Dépasse la limite de qualité (> 0,1 µg/l)</div>
+    <div class="legend-item"><div class="legend-box" style="background:#40c58d"></div> Conforme à la limite de qualité (&lt; 0,1 µg/L)*</div>
+    <div class="legend-item"><div class="legend-box" style="background:#F5BA47"></div> Dépasse la limite du HCSP (> 0,02 µg/L)**</div>
+    <div class="legend-item"><div class="legend-box" style="background:#E7292D"></div> Dépasse la limite de qualité (> 0,1 µg/L)</div>
     <hr style="border: none; border-top: 1px solid #eee; margin: 6px 0;">
     <div style="font-size: 10px;">
       <div>Source : Ministère des Solidarités et de la Santé</div>
@@ -145,25 +187,23 @@
           const res = await fetch(url, { headers: { 'Accept-Language': 'fr' } });
           const data = await res.json();
 
-          // Filtre les types pertinents et dédoublonne par nom de commune
           const seen = new Set();
-const filtered = data.features.filter(f => {
-  const type = f.properties.type;
-  const parts = f.properties.display_name.split(',');
-  const nom = parts[0].trim();
-  const dept = parts[1] ? parts[1].trim() : '';
-  const cle = `${nom}|${dept}`; // clé unique = nom + département
-  const isRelevant = ['city', 'town', 'village', 'municipality', 'administrative'].includes(type);
-  if (!isRelevant || seen.has(cle)) return false;
-  seen.add(cle);
-  return true;
-});
+          const filtered = data.features.filter(f => {
+            const type = f.properties.type;
+            const parts = f.properties.display_name.split(',');
+            const nom = parts[0].trim();
+            const dept = parts[1] ? parts[1].trim() : '';
+            const cle = `${nom}|${dept}`;
+            const isRelevant = ['city', 'town', 'village', 'municipality', 'administrative'].includes(type);
+            if (!isRelevant || seen.has(cle)) return false;
+            seen.add(cle);
+            return true;
+          });
 
           return {
             features: filtered.map(f => ({
               type: 'Feature',
               geometry: f.geometry,
-              // Affiche "Commune, Département" seulement
               place_name: f.properties.display_name
                 .split(',')
                 .slice(0, 2)
@@ -240,16 +280,33 @@ const filtered = data.features.filter(f => {
   function toggleFullscreen() {
     const container = document.getElementById('map-container');
     const btn = document.getElementById('fullscreen-btn');
-    if (!document.fullscreenElement) {
-      container.requestFullscreen();
-      btn.textContent = '✕ Quitter le plein écran';
+    const isIOS = /iPhone|iPad/i.test(navigator.userAgent);
+
+    if (!isIOS && document.fullscreenEnabled) {
+      if (!document.fullscreenElement) {
+        container.requestFullscreen();
+        btn.textContent = '✕ Quitter';
+      } else {
+        document.exitFullscreen();
+        btn.textContent = '⛶ Plein écran';
+      }
     } else {
-      document.exitFullscreen();
-      btn.textContent = '⛶ Plein écran';
+      if (container.classList.contains('fake-fullscreen')) {
+        container.classList.remove('fake-fullscreen');
+        btn.textContent = '⛶ Plein écran';
+      } else {
+        container.classList.add('fake-fullscreen');
+        btn.textContent = '✕ Quitter';
+      }
+      setTimeout(() => map.resize(), 100);
     }
   }
 
   document.addEventListener('fullscreenchange', function() {
+    const btn = document.getElementById('fullscreen-btn');
+    if (!document.fullscreenElement) {
+      btn.textContent = '⛶ Plein écran';
+    }
     map.resize();
   });
 </script>
